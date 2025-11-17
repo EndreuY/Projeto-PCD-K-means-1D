@@ -71,7 +71,7 @@ Exemplo:
 
 ## Scripts de Teste
 Os scripts estão em cada subpasta:
-- Serial: `serial/run_tests_serial.sh` gera baseline em `serial_results.csv`
+- Serial: `serial/run_tests_serial.sh` gera `serial_results.csv`
 - OpenMP: `openmp/run_tests_openmp.sh` gera `omp_results.csv`
 - CUDA: `cuda/run_tests_cuda.sh` gera `results_cuda.csv`
 
@@ -86,8 +86,6 @@ Cada execução imprime:
 ```
 Iterações: <n> | SSE final: <valor> | Tempo: <ms>
 ```
-Speedup = Tempo Serial / Tempo Paralelo.
-
 ## Geração de Dados
 ```
 python3 gera_dados.py
