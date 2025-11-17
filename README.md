@@ -28,12 +28,6 @@ gera_dados.py             # Geração de dados sintéticos (compartilhado)
 - GCC (para Serial/OpenMP)
 - Suporte a OpenMP (`-fopenmp`)
 - NVIDIA CUDA Toolkit (para versão GPU)
-- Python 3 + pandas + seaborn + matplotlib (para análise)
-
-Instalar dependências Python:
-```
-pip install pandas seaborn matplotlib
-```
 
 ## Compilação
 ### Serial
@@ -75,11 +69,6 @@ Os scripts estão em cada subpasta:
 - OpenMP: `openmp/run_tests_openmp.sh` gera `omp_results.csv`
 - CUDA: `cuda/run_tests_cuda.sh` gera `results_cuda.csv`
 
-Executar exemplo (OpenMP):
-```
-cd openmp
-bash run_tests_openmp.sh
-```
 
 ## Métricas
 Cada execução imprime:
