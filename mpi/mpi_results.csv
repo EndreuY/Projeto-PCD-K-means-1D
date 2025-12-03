@@ -1,0 +1,4 @@
+NP,Tempo_ms,SSE_Final,Iteracoes,Speedup_Serial,Tempo_Communicacao_ms
+1,40.4,17921372.562682,10,1.5842,0.0
+2,29.1,17921372.562681,10,2.1993,0.3
+4,14.7,17921372.562681,10,4.3537,4.5
