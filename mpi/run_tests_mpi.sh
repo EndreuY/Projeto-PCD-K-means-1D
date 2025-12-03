@@ -53,12 +53,16 @@ else
 fi
 
 # Cabeçalho CSV
-echo "NP,Tempo_ms,SSE_Final,Iteracoes,Speedup_Serial,Tempo_Communicacao_ms" > "$OUT"
+echo "NP,Tempo_ms,SSE_Final,Iteracoes,Speedup_Serial,Speedup_Distribuido,Tempo_Communicacao_ms" > "$OUT"
+
+# Determina o menor NP da lista para usar como referência do speedup distribuído
+MIN_NP=$(echo "$NP_LIST" | tr ' ' '\n' | awk '{print $1}' | sort -n | head -n1)
+BASE_MPI_TIME=""
 
 for NP in $NP_LIST; do
     printf "== Executando MPI com NP=%s ==\n" "$NP"
     # Executa no diretório do script
-    LOG=$(cd "$SCRIPT_DIR" && mpirun -np "$NP" ./kmeans_1d_mpi "$DATA" "$CENT" "$MAXI" "$EPS" "$ASSIGN" "$CENTOUT" 2>&1)
+    LOG=$(cd "$SCRIPT_DIR" && mpirun --oversubscribe -np "$NP" ./kmeans_1d_mpi "$DATA" "$CENT" "$MAXI" "$EPS" "$ASSIGN" "$CENTOUT" 2>&1)
     # Exibe log para o usuário
     printf "%s\n" "$LOG"
 
@@ -95,7 +99,18 @@ for NP in $NP_LIST; do
         SPEEDUP="NA"
     fi
 
-    echo "$NP,$TEMPO_MS,$SSE,$ITERS,$SPEEDUP,$COMM_MS" >> "$OUT"
+    # Guarda tempo base do MPI (menor NP) para calcular speedup distribuído
+    if [ "$NP" = "$MIN_NP" ] && [ "$TEMPO_MS" != "NA" ]; then
+        BASE_MPI_TIME="$TEMPO_MS"
+    fi
+
+    if [ -n "$BASE_MPI_TIME" ] && [ "$TEMPO_MS" != "NA" ]; then
+        SPEEDUP_DIST=$(awk -v b="$BASE_MPI_TIME" -v t="$TEMPO_MS" 'BEGIN{ if(t>0){ printf "%.4f", b/t } else { print "NA" } }')
+    else
+        SPEEDUP_DIST="NA"
+    fi
+
+    echo "$NP,$TEMPO_MS,$SSE,$ITERS,$SPEEDUP,$SPEEDUP_DIST,$COMM_MS" >> "$OUT"
 done
 
 printf "Resultados salvos em %s\n" "$OUT"
