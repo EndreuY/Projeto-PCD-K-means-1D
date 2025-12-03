@@ -1,9 +1,10 @@
-# K-Means 1D: Serial, OpenMP e CUDA
+# K-Means 1D: Serial, OpenMP, CUDA e MPI
 
 Projeto de comparação de desempenho entre implementações do algoritmo K-Means em 1 dimensão:
 - Versão Serial (C)
 - Versão OpenMP (paralela em CPU)
 - Versão CUDA (paralela em GPU)
+- Versão MPI (paralela distribuída)
 
 ## Estrutura do Projeto
 ```
@@ -14,6 +15,10 @@ serial/
 openmp/
   kmeans_1d_omp.c
   run_tests_openmp.sh
+  README.md
+mpi/
+  kmeans_1d_mpi.c
+  run_tests_mpi.sh
   README.md
 cuda/
   kmeans_1d_cuda.cu
@@ -28,6 +33,13 @@ gera_dados.py             # Geração de dados sintéticos (compartilhado)
 - GCC (para Serial/OpenMP)
 - Suporte a OpenMP (`-fopenmp`)
 - NVIDIA CUDA Toolkit (para versão GPU)
+- MPI (mpicc, mpirun) (para versão distribuída)
+- Python 3 + pandas + seaborn + matplotlib (para análise)
+
+Instalar dependências Python:
+```
+pip install pandas seaborn matplotlib
+```
 
 ## Compilação
 ### Serial
@@ -44,6 +56,11 @@ gcc -O2 -fopenmp -std=c99 kmeans_1d_omp.c -o kmeans_1d_omp -lm
 ```
 cd cuda
 nvcc -O2 kmeans_1d_cuda.cu -o kmeans_1d_cuda
+```
+### MPI
+```
+cd mpi
+mpicc -O2 -std=c99 kmeans_1d_mpi.c -o kmeans_1d_mpi -lm
 ```
 
 ## Uso Básico
@@ -62,19 +79,31 @@ Exemplo:
 ```
 ./cuda/kmeans_1d_cuda dados.csv centroides_iniciais.csv [max_iter=50] [eps=1e-4] [assign.csv] [centroids.csv]
 ```
+### MPI
+```
+mpirun -np 4 ./mpi/kmeans_1d_mpi dados.csv centroides_iniciais.csv [max_iter=50] [eps=1e-4] [assign.csv] [centroids.csv]
+```
 
 ## Scripts de Teste
 Os scripts estão em cada subpasta:
-- Serial: `serial/run_tests_serial.sh` gera `serial_results.csv`
+- Serial: `serial/run_tests_serial.sh` gera baseline em `serial_results.csv`
 - OpenMP: `openmp/run_tests_openmp.sh` gera `omp_results.csv`
 - CUDA: `cuda/run_tests_cuda.sh` gera `results_cuda.csv`
+- MPI: `mpi/run_tests_mpi.sh` gera `mpi_results.csv`
 
+Executar exemplo (OpenMP):
+```
+cd openmp
+bash run_tests_openmp.sh
+```
 
 ## Métricas
 Cada execução imprime:
 ```
 Iterações: <n> | SSE final: <valor> | Tempo: <ms>
 ```
+Speedup = Tempo Serial / Tempo Paralelo.
+
 ## Geração de Dados
 ```
 python3 gera_dados.py

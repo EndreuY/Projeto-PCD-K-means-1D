@@ -222,7 +222,7 @@ int main(int argc, char **argv)
     double prev_sse = 1e300;
     double sse = 0.0;
 
-    double comm_time = 0.0; /* acumula tempo gasto em chamadas de MPI_Reduce */
+    double comm_time = 0.0; /* acumula tempo gasto em chamadas de comunicação (max entre ranks) */
 
     double t0 = MPI_Wtime();
 
@@ -237,6 +237,7 @@ int main(int argc, char **argv)
         }
         double sse_local = 0.0;
 
+        /* Assignment local */
         for (int i = 0; i < Nloc; i++)
         {
             int best = -1;
@@ -257,46 +258,51 @@ int main(int argc, char **argv)
             sse_local += bestd;
         }
 
-        double *sum_global = NULL;
-        int *cnt_global = NULL;
-        if (rank == 0)
+        /* Preparar buffers globais */
+        double *sum_global = (double *)calloc((size_t)K, sizeof(double));
+        int *cnt_global = (int *)calloc((size_t)K, sizeof(int));
+        if (!sum_global || !cnt_global)
         {
-            sum_global = (double *)calloc((size_t)K, sizeof(double));
-            cnt_global = (int *)calloc((size_t)K, sizeof(int));
-            if (!sum_global || !cnt_global)
-            {
-                fprintf(stderr, "root sem memoria global\n");
-                MPI_Abort(MPI_COMM_WORLD, 1);
-            }
+            fprintf(stderr, "rank %d: sem memoria global\n", rank);
+            MPI_Abort(MPI_COMM_WORLD, 1);
         }
 
-        /* reduções com medição de tempo (para contabilizar tempo de comunicação) */
-        double c0 = MPI_Wtime();
-        MPI_Reduce(sum_local, sum_global, K, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        double c1 = MPI_Wtime();
-        comm_time += (c1 - c0);
+        /* 1) Allreduce para sums e counts, medindo tempo local de cada chamada */
+        double ar_sum_t0 = MPI_Wtime();
+        MPI_Allreduce(sum_local, sum_global, K, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
+        double ar_sum_t1 = MPI_Wtime();
+        double local_ar_sum = ar_sum_t1 - ar_sum_t0;
 
-        c0 = MPI_Wtime();
-        MPI_Reduce(cnt_local, cnt_global, K, MPI_INT, MPI_SUM, 0, MPI_COMM_WORLD);
-        c1 = MPI_Wtime();
-        comm_time += (c1 - c0);
+        double ar_cnt_t0 = MPI_Wtime();
+        MPI_Allreduce(cnt_local, cnt_global, K, MPI_INT, MPI_SUM, MPI_COMM_WORLD);
+        double ar_cnt_t1 = MPI_Wtime();
+        double local_ar_cnt = ar_cnt_t1 - ar_cnt_t0;
 
+        /* Reduzir os tempos locais para obter o máximo observado entre ranks */
+        double max_ar_sum = 0.0, max_ar_cnt = 0.0;
+        MPI_Reduce(&local_ar_sum, &max_ar_sum, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+        MPI_Reduce(&local_ar_cnt, &max_ar_cnt, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        /* 2) Reduce SSE_local -> sse_global (usar MPI_Reduce) */
         double sse_global = 0.0;
-        c0 = MPI_Wtime();
+        double rd_sse_t0 = MPI_Wtime();
         MPI_Reduce(&sse_local, &sse_global, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
-        c1 = MPI_Wtime();
-        comm_time += (c1 - c0);
+        double rd_sse_t1 = MPI_Wtime();
+        double local_rd_sse = rd_sse_t1 - rd_sse_t0;
+        double max_rd_sse = 0.0;
+        MPI_Reduce(&local_rd_sse, &max_rd_sse, 1, MPI_DOUBLE, MPI_MAX, 0, MPI_COMM_WORLD);
+
+        /* Atualiza centróides localmente em cada rank usando os resultados do Allreduce */
+        for (int c = 0; c < K; c++)
+        {
+            if (cnt_global[c] > 0)
+                C[c] = sum_global[c] / (double)cnt_global[c];
+            /* se cnt_global[c]==0, mantém C[c] */
+        }
 
         int converged = 0;
         if (rank == 0)
         {
-            for (int c = 0; c < K; c++)
-            {
-                if (cnt_global[c] > 0)
-                    C[c] = sum_global[c] / (double)cnt_global[c];
-                else
-                    C[c] = X_all[0];
-            }
             sse = sse_global;
             double rel = fabs(sse - prev_sse) / (prev_sse > 0.0 ? prev_sse : 1.0);
             prev_sse = sse;
@@ -308,14 +314,16 @@ int main(int argc, char **argv)
             else
                 iters = it + 1;
 
-            free(sum_global);
-            free(cnt_global);
+            /* acumula o tempo de comunicação (usando máximos por operação) */
+            comm_time += max_ar_sum + max_ar_cnt + max_rd_sse;
         }
 
         free(sum_local);
         free(cnt_local);
+        free(sum_global);
+        free(cnt_global);
 
-        MPI_Bcast(C, K, MPI_DOUBLE, 0, MPI_COMM_WORLD);
+        /* Broadcast do sinal de convergência para todos os ranks */
         MPI_Bcast(&converged, 1, MPI_INT, 0, MPI_COMM_WORLD);
 
         if (converged)
@@ -349,7 +357,7 @@ int main(int argc, char **argv)
         printf("K-means 1D (MPI)\n");
         printf("N=%d K=%d max_iter=%d eps=%g\n", N, K, max_iter, eps);
         printf("Iterações: %d | SSE final: %.6f | Tempo: %.1f ms\n", iters, sse, ms);
-        printf("Tempo Comunicação (reductions): %.1f ms\n", comm_ms);
+        printf("Tempo Comunicação (reductions/allreduces - max entre ranks): %.1f ms\n", comm_ms);
     }
 
     free(Xloc);
